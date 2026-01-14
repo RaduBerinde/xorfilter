@@ -204,29 +204,62 @@ func buildBinaryFuse[T Unsigned](b *BinaryFuseBuilder, keys []uint64) (_ BinaryF
 				reverseOrder[stacksize] = hash
 				stacksize++
 
-				index1, index2, index3 := filter.getHashFromHash(hash)
+				h01 := uint32(hash>>18) & filter.SegmentLengthMask
+				h02 := uint32(hash) & filter.SegmentLengthMask
 
-				h012[1] = index2
-				h012[2] = index3
-				h012[3] = index1
-				h012[4] = h012[1]
+				var other_index1, other_index2 uint32
+				var f1, f2 uint8
+				switch found {
+				case 0:
+					other_index1 = index + filter.SegmentLength
+					other_index1 ^= h01
+					f1 = 1
+					other_index2 = index + 2*filter.SegmentLength
+					other_index2 ^= h02
+					f2 = 2
 
-				other_index1 := h012[found+1]
+				case 1:
+					other_index1 = index + filter.SegmentLength
+					other_index1 ^= h01 ^ h02
+					f1 = 2
+					other_index2 = index - filter.SegmentLength
+					other_index2 ^= h01
+					f2 = 0
+
+				case 2:
+					other_index1 = index - 2*filter.SegmentLength
+					other_index1 ^= h02
+					f1 = 0
+					other_index2 = index - filter.SegmentLength
+					other_index2 ^= h01 ^ h02
+					f2 = 1
+				}
+
+				// Verification. Turn on for debugging.
+				if false {
+					index1, index2, index3 := filter.getHashFromHash(hash)
+					if other_index1 != []uint32{index1, index2, index3}[(found+1)%3] {
+						panic("incorrect other_index1")
+					}
+					if other_index2 != []uint32{index1, index2, index3}[(found+2)%3] {
+						panic("incorrect other_index2")
+					}
+				}
+
 				alone[Qsize] = other_index1
 				if (t2count[other_index1] >> 2) == 2 {
 					Qsize++
 				}
 				t2count[other_index1] -= 4
-				t2count[other_index1] ^= filter.mod3(found + 1) // could use this instead: tabmod3[found+1]
+				t2count[other_index1] ^= f1
 				t2hash[other_index1] ^= hash
 
-				other_index2 := h012[found+2]
 				alone[Qsize] = other_index2
 				if (t2count[other_index2] >> 2) == 2 {
 					Qsize++
 				}
 				t2count[other_index2] -= 4
-				t2count[other_index2] ^= filter.mod3(found + 2) // could use this instead: tabmod3[found+2]
+				t2count[other_index2] ^= f2
 				t2hash[other_index2] ^= hash
 			}
 		}
