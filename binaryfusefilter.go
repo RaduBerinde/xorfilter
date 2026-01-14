@@ -204,14 +204,38 @@ func buildBinaryFuse[T Unsigned](b *BinaryFuseBuilder, keys []uint64) (_ BinaryF
 				reverseOrder[stacksize] = hash
 				stacksize++
 
+				h01 := uint32(hash>>18) & filter.SegmentLengthMask
+				h02 := uint32(hash) & filter.SegmentLengthMask
+
+				var other_index1, other_index2 uint32
+				switch found {
+				case 0:
+					other_index1 = index + filter.SegmentLength
+					other_index2 = other_index1 + filter.SegmentLength
+					other_index1 ^= h01
+					other_index2 ^= h02
+
+				case 1:
+					other_index2 -= filter.SegmentLength
+					other_index2 ^= h01
+					other_index1 = other_index2 + 2*filter.SegmentLength
+					other_index1 ^= h02
+
+				case 2:
+					other_index1 -= 2 * filter.SegmentLength
+					other_index1 ^= h02
+					other_index2 = other_index1 + filter.SegmentLength
+					other_index2 ^= h01
+				}
+
 				index1, index2, index3 := filter.getHashFromHash(hash)
+				if other_index1 != []uint32{index1, index2, index3}[(found+1)%3] {
+					panic("incorrect other_index1")
+				}
+				if other_index2 != []uint32{index1, index2, index3}[(found+2)%3] {
+					panic("incorrect other_index2")
+				}
 
-				h012[1] = index2
-				h012[2] = index3
-				h012[3] = index1
-				h012[4] = h012[1]
-
-				other_index1 := h012[found+1]
 				alone[Qsize] = other_index1
 				if (t2count[other_index1] >> 2) == 2 {
 					Qsize++
@@ -220,7 +244,6 @@ func buildBinaryFuse[T Unsigned](b *BinaryFuseBuilder, keys []uint64) (_ BinaryF
 				t2count[other_index1] ^= filter.mod3(found + 1) // could use this instead: tabmod3[found+1]
 				t2hash[other_index1] ^= hash
 
-				other_index2 := h012[found+2]
 				alone[Qsize] = other_index2
 				if (t2count[other_index2] >> 2) == 2 {
 					Qsize++
